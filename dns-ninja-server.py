@@ -19,8 +19,8 @@ def read_conffile(filename):
         with open(filename,'r') as fh:
             conf = json.load(fh)
             return conf
-    except:
-        raise Exception('Error reading config file: %s' % filename)
+    except Exception, e:
+        raise Exception('Error reading config file: %s' % filename, e)
 
 def generate_response(pkt, dest, proto):
    ptype='A'
@@ -39,7 +39,7 @@ def generate_response(pkt, dest, proto):
             qdcount=pkt[DNS].qdcount, # copy question-count
             qd=pkt[DNS].qd, # copy question itself
             ancount=1, #we provide a single answer
-            an=DNSRR(rrname=pkt[DNS].qd.qname, type=ptype, ttl=1, rdata=dest ),
+            an=DNSRR(rrname=pkt[DNS].qd.qname, type=ptype, ttl=5, rdata=dest),
       )
    return resp
 
@@ -53,18 +53,18 @@ class DNSResponder:
         self.config = config
         self.resolver = resolver.Resolver(config) 
         
-        self.server_ip = config['serverip']
+        self.server_ip = config['server-ip']
+        self.hostname_base = config['hostname-base']
 
     def get_response(self, pkt):
 
         conf = self.config
         resolver = self.resolver
         server_ip = self.server_ip
+        hostname_base = self.hostname_base
  
         if (DNS not in pkt or pkt[DNS].opcode != 0L or pkt[DNS].ancount != 0 or pkt[IP].src == server_ip):
-            print(DNS)
-            print(pkt[DNS])
-            sys.stderr.write("no qd.qtype in this dns request?!\n")
+            #sys.stderr.write("no qd.qtype in this dns request?!\n") #TODO figure out what to log here?
             return
 
         try:
@@ -85,14 +85,20 @@ class DNSResponder:
             Find result 
             """ 
             hostname = pkt[DNS].qd.qname.lower()
+            if hostname[-1] == '.':
+                hostname = hostname[:-1]
+
+            sys.stderr.write('query src: %s query: %s\n' % (pkt[IP].src, hostname)) 
+            if not hostname.endswith(hostname_base):
+                return
+
             dest_ip = '8.8.8.8' #resolver.resolve(hostname) 
             
-
             """
             Build response
             """
             resp = generate_response(pkt, dest_ip, pkt_proto)
-            send(resp,verbose=0)
+            send(resp, verbose=0)
 
             return record(pkt[IP].src, hostname, pkt_proto, dest_ip)
         except:
@@ -112,5 +118,5 @@ if __name__ == '__main__':
 
     responder = DNSResponder(conf)
 
-    dns_filter = "udp port 53 and ip dst %s and not ip src %s" % (conf['serverip'], conf['serverip'])
+    dns_filter = "udp port 53 and ip dst %s and not ip src %s" % (conf['server-ip'], conf['server-ip'])
     sniff(filter=dns_filter, store=0, prn=responder.get_response)

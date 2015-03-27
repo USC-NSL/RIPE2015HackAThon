@@ -2,5 +2,6 @@
     "db.url": "www.example.com",
     "db.user": "root",
     "db.pass": "",
-    "serverip": "192.168.178.90"
+    "server-ip": "100.71.162.104",
+    "hostname-base": "m.ripeatlasdns.net"
 }
