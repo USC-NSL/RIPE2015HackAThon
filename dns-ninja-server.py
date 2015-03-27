@@ -12,6 +12,7 @@ import json
 import traceback
 import os.path
 import struct
+import resolver
 
 def read_conffile(filename):
     try:
@@ -19,7 +20,7 @@ def read_conffile(filename):
             conf = json.load(fh)
             return conf
     except:
-        throw Exception('Error reading config file: %s' % filename)
+        raise Exception('Error reading config file: %s' % filename)
 
 def generate_response(pkt, dest, proto):
    ptype='A'
@@ -50,14 +51,19 @@ class DNSResponder:
 
     def __init__(self, config):
         self.config = config
-        self.resolver = Resolver(config) 
+        self.resolver = resolver.Resolver(config) 
+        
+        self.server_ip = config['serverip']
 
     def get_response(self, pkt):
 
         conf = self.config
         resolver = self.resolver
-    
-        if (DNS not in pkt or pkt[DNS].opcode != 0L or pkt[DNS].ancount != 0 or pkt[IP].src == conf['ServerIP']):
+        server_ip = self.server_ip
+ 
+        if (DNS not in pkt or pkt[DNS].opcode != 0L or pkt[DNS].ancount != 0 or pkt[IP].src == server_ip):
+            print(DNS)
+            print(pkt[DNS])
             sys.stderr.write("no qd.qtype in this dns request?!\n")
             return
 
@@ -79,7 +85,8 @@ class DNSResponder:
             Find result 
             """ 
             hostname = pkt[DNS].qd.qname.lower()
-            dest_ip = resolver.resolve(hostname) 
+            dest_ip = '8.8.8.8' #resolver.resolve(hostname) 
+            
 
             """
             Build response
@@ -105,5 +112,5 @@ if __name__ == '__main__':
 
     responder = DNSResponder(conf)
 
-    filter = "udp port 53 and ip dst %s and not ip src %s" % (conf['ServerIP'], conf['ServerIP'])
-    sniff(filter=filter, store=0, prn=responder.get_response)
+    dns_filter = "udp port 53 and ip dst %s and not ip src %s" % (conf['serverip'], conf['serverip'])
+    sniff(filter=dns_filter, store=0, prn=responder.get_response)
