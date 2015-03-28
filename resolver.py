@@ -1,39 +1,54 @@
 import time
 from sqlalchemy import *
+import pylru
 
 class Resolver:
 
     def __init__(self, config):
         self.address = config['db.url']
         self.uniq_host = config['hostname-base']
-
-        self.engine = create_engine(self.address)
+      
+        self.engine = create_engine(self.address, pool_recycle=3600, pool_size=10)
+      
+        cache_size = config.get('cache-size', 100)
+        self.cache = pylru.lrucache(cache_size)
+ 
+        #add auto reconnect
         self.connection = self.engine.connect()
         metadata = MetaData(bind=self.connection)
-        self.users = Table('measurement', metadata, autoload=True)
+        self.m_table = Table('measurement', metadata, autoload=True)
 
     def resolve(self, hostname):
 
-        u = self.connection.execute(self.users.select().where(self.users.c.hostname==hostname))
+        if hostname in self.cache:
+            measurement = self.cache[hostname]
+        else:
+            results = self.connection.execute(self.m_table.select().where(self.m_table.c.hostname==hostname))
+            measurement_row = results.first() #implicit close
+            measurement = dict(measurement_row) #copy the row data to cache
+            
+            dests = measurement['destination_list']
+            dest_list = dests.split(',')
+            measurement['dest_list'] = dest_list
 
+            self.cache[hostname] = measurement 
+ 
         timestamp = int(time.time())
-        for row in u:
-            dests = row['destination_list']
-            if row['measurement_start_time'] == None:
-                print "First time probing this hostname"
-                
-                update = self.connection.execute(self.users.update().where(self.users.c.id==row['id']), {"measurement_start_time": timestamp})
-                #TODO what to do here if this fails??               
+        dest_list = measurement['dest_list']      
+ 
+        if measurement['measurement_start_time'] == None:
+            print "First time probing this hostname"
+            
+            update = self.connection.execute(self.m_table.update().where(self.m_table.c.id==measurement['id']), {"measurement_start_time": timestamp})
+            #TODO what to do here if this fails??
 
-                dest_list=dests.split(',')
-                #TODO cache here lol. 
-                return dest_list[0]
-            else: 
-                current_time=timestamp
-                first_time=int(row['measurement_start_time'])
-                interval=int(row['measurement_interval'])
-                difference=current_time - first_time
+            return dest_list[0]
+        else: 
+            current_time = timestamp
+            first_time = measurement['measurement_start_time']
+            interval = measurement['measurement_interval']
+            difference = current_time - first_time
 
-                dest_list=dests.split(',')
-                slot = (difference/interval) % len(dest_list)
-                return dest_list[slot]
+            slot = (difference/interval) % len(dest_list)
+            
+            return dest_list[slot]
