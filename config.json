@@ -1,5 +1,5 @@
 {
-    "db.url": "www.example.com",
+    "db.url": "'mysql+pymysql://user:pass@localhost:13307/measurement'",
     "db.user": "root",
     "db.pass": "",
     "server-ip": "100.71.162.104",
