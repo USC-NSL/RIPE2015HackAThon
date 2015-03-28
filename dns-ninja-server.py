@@ -92,7 +92,7 @@ class DNSResponder:
             if not hostname.endswith(hostname_base):
                 return
 
-            dest_ip = '8.8.8.8' #resolver.resolve(hostname) 
+            dest_ip = resolver.resolve(hostname) 
             
             """
             Build response
