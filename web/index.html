@@ -3,23 +3,38 @@
 
 <title>DNS JUNKIE</title>
 <body>
-<h1>HackMyDNS</h1>
+<h1>RIPE Atlas Multi-Destination DNS Service</h1>
 
 <form action="return.php" method="get">
+
+<p>
 Measurement type:<br>
-<input type="text" name="m_type">
-<br>
-Query:<br>
-<input type="text" name="dest_list">
-</br>
-Interval:<br>
-<input type="text" name="interval">
+<select name="m_type">
+    <option value="1">Ping</option>
+    <option value="2">Traceroute</option>
+    <option value="3">SSL</option>
+    <option value="4">DNS</option>
+</select>
+</p>
 
-</br>
+<p>
+Destination List<br>
+<textarea rows="10" cols="50" name="dest_list">
+One IP or hostname per line or a comma separated list.
+</textarea>
+</p>
+
+<p>
+Interval (minutes):<br>
+<select name="interval">
+    <option value="60000">1</option>
+    <option selected="selected" value="300000">5</option>
+    <option value="600000">10</option>
+</select>
+</p>
+
 <input type="submit" value="Submit">
-
 </form>
-
 
 </body>
 </html>
