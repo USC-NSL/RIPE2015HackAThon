@@ -6,13 +6,10 @@ https://github.com/emileaben/scapy-dns-ninja
 """
 from scapy.all import *
 import sys
-from random import shuffle
-import re
 import json
 import traceback
-import os.path
-import struct
 import resolver
+import socket
 
 def read_conffile(filename):
     try:
@@ -27,7 +24,7 @@ def generate_response(pkt, dest, proto):
 
    if proto=='v6':
       ptype='AAAA'
-   elif proto=='cnames':
+   elif proto=='cname':
       ptype='CNAME'
 
    resp = IP(dst=pkt[IP].src, id=pkt[IP].id)\
@@ -46,6 +43,19 @@ def generate_response(pkt, dest, proto):
 def record(src, hostname, proto, dest_ip):
    ''' write we sent this pkt somewhere '''
    return "src=%s list=%s proto=%s dest=%s" % (src, hostname, proto, dest_ip)
+
+def is_ip(dest_str):
+    
+    try:
+        socket.inet_aton(dest_str)
+        return True
+    except socket.error:
+        #try IPv6
+        try:
+            socket.inet_pton(socket.AF_INET6, dest_str)
+            return True
+        except socket.error:
+            return False
 
 class DNSResponder:
 
@@ -92,15 +102,18 @@ class DNSResponder:
             if not hostname.endswith(hostname_base):
                 return
 
-            dest_ip = resolver.resolve(hostname) 
+            dest = resolver.resolve(hostname) 
+            if not is_ip(dest): #return CNAME is this is a hostname
+                pkt_proto = 'cname'        
             
+
             """
             Build response
             """
-            resp = generate_response(pkt, dest_ip, pkt_proto)
+            resp = generate_response(pkt, dest, pkt_proto)
             send(resp, verbose=0)
 
-            return record(pkt[IP].src, hostname, pkt_proto, dest_ip)
+            return record(pkt[IP].src, hostname, pkt_proto, dest)
         except:
             sys.stderr.write('Error processing response\n')
             traceback.print_exc(file=sys.stderr)
