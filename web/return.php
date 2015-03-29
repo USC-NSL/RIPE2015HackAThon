@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html>
-<h1>HackMyDNS</h1>
+<h1>RIPE Atlas DNS</h1>
 
 <?php
 
