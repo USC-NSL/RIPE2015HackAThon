@@ -20,12 +20,12 @@ def read_conffile(filename):
         raise Exception('Error reading config file: %s' % filename, e)
 
 def generate_response(pkt, dest, proto):
-   ptype='A'
+   ptype = 'A'
 
-   if proto=='v6':
-      ptype='AAAA'
-   elif proto=='cname':
-      ptype='CNAME'
+   if proto == 'v6':
+      ptype = 'AAAA'
+   elif proto == 'cname':
+      ptype = 'CNAME'
 
    resp = IP(dst=pkt[IP].src, id=pkt[IP].id)\
       /UDP(dport=pkt[UDP].sport, sport=53)\
@@ -40,9 +40,22 @@ def generate_response(pkt, dest, proto):
       )
    return resp
 
-def record(src, hostname, proto, dest_ip):
+def generate_no_answer(pkt):
+    resp = IP(dst=pkt[IP].src, id=pkt[IP].id)\
+      /UDP(dport = pkt[UDP].sport, sport=53)\
+      /DNS(id = pkt[DNS].id,
+            aa = 1, #we are authoritative
+            qr = 1, #it's a response
+            rd = pkt[DNS].rd, # copy recursion-desired
+            qdcount = pkt[DNS].qdcount, # copy question-count
+            qd = pkt[DNS].qd, # copy question itself
+            ancount = 0 #no answer
+      )
+    return resp 
+
+def record(src, hostname, proto, dest):
    ''' write we sent this pkt somewhere '''
-   return "src=%s list=%s proto=%s dest=%s" % (src, hostname, proto, dest_ip)
+   return "src=%s list=%s proto=%s dest=%s" % (src, hostname, proto, dest)
 
 def is_ip(dest_str):
     
@@ -89,7 +102,9 @@ class DNSResponder:
                 pkt_proto='v6'  
             else: ### won't respond to non A or AAAA packet
                 sys.stderr.write('Ignoring DNS query type %d\n' % pkt[DNS].qd.qtype)
-                return
+                resp = generate_no_answer(pkt)
+                send(resp, verbose=0)
+                return record(pkt[IP].src, pkt[DNS].qd.qname, pkt[DNS].qd.qtype, 'none')
 
             """
             Find result 
