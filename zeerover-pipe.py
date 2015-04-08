@@ -1,8 +1,9 @@
-#!/usr/bin/python -u
+#!/usr/bin/env python
 import socket
 import select
 import sys
 import os
+import fileinput
 import threading
 import traceback
 import resolver
@@ -11,6 +12,7 @@ import json
 DATA_TEMPLATE = 'DATA\t%s\t%s\t%s\t%s\t%s\t%s\n'
 TTL = '5'
 HOSTNAME_BASE = None
+#sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 
 def read_conffile(filename):
     try:
@@ -20,22 +22,14 @@ def read_conffile(filename):
     except Exception, e:
         raise Exception('Error reading config file: %s' % filename, e)
 
-def config_socket(socket_file):
-     # Make sure the socket does not already exist
-    try:
-        os.unlink(socket_file)
-    except OSError:
-        if os.path.exists(socket_file):
-            raise
-
-def process(data, conn, resolver):
+def process(data, resolver):
     line = data.strip()
-    print(line)
 
     if line == 'HELO\t1' or line == 'HELO\t2' or line == 'HELO\t3':
-        print('SEnding OK')
-        conn.sendall('OK\t\n')
-        return 
+        sys.stderr.write('Sending OK\n')
+        sys.stdout.write('OK\t\n')
+        sys.stdout.flush()
+        return
    
     chunks = line.split('\t')
     
@@ -69,16 +63,18 @@ def process(data, conn, resolver):
                 qtype = 'A'
 
             response = DATA_TEMPLATE % (qname, qclass, qtype, TTL, qid, dest)
-            conn.sendall(response)
+            sys.stdout.write(response)
             
         if qtype == 'ANY' or qtype == 'SOA':
             response = DATA_TEMPLATE % (qname, qclass, 'SOA', TTL, qid, 'ns1.m.ripeatlasdns.net\troot.ripeatlasdns.net\t2008080300\t1800\t3600\t604800\t3600')
-            conn.sendall(response)
+            sys.stdout.write(response)
     else:
-        conn.sendall('FAIL\n')
+        sys.stdout.write('FAIL\n')
+        sys.stdout.flush()
         return
         
-    conn.sendall('END\n')
+    sys.stdout.write('END\n')
+    sys.stdout.flush()
 
 def is_ip(dest_str):
     try:
@@ -102,55 +98,22 @@ if __name__ == '__main__':
     config = read_conffile(sys.argv[1])
     sys.stderr.write('Finished reading configuration\n')
 
-    socket_file = config['socket-file']
+    #socket_file = config['socket-file']
     HOSTNAME_BASE = config['hostname-base']
-    config_socket(socket_file)
    
     resolver = resolver.Resolver(config)
 
-    # Create a UDS socket
-    socket_server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-
-    # Bind the socket to the port
-    print >>sys.stderr, 'listening on %s' % socket_file
-    socket_server.bind(socket_file)
-    socket_server.listen(5)
-
-    sys.stderr.write('Server started\n')
- 
-    connection_list = [socket_server]
-    file_map = {}
-
     try:
-        while 1:
+        while True:
+            
+            line = sys.stdin.readline()
+            sys.stderr.write('Got line %s' % line)
             try:
-                rlist, wlist, xlist = select.select(connection_list, [], [], 5000)
-                print('%s %s %s' % (rlist, wlist, xlist))
-                for sock in rlist:
-                    
-                    if sock == socket_server:
-                        conn, addr = sock.accept()
-                        connection_list.append(conn)
-                    else:
-                        conn = sock
-
-                    if conn not in file_map:
-                        file_map[conn] = conn.makefile()                            
-                    
-                    f = file_map[conn]
-                    data = f.readline()
-                    print('data: %s' % data)
-                    
-                    if not data:
-                        conn.close()
-                        connection_list.remove(conn)
-                    else:
-                        process(data, conn, resolver)
-            except (KeyboardInterrupt, SystemExit):
-                break
+                process(line, resolver)
             except:
-                traceback.print_exc(file=sys.stderr) 
-                pass
-    finally:
-        sys.stderr.write('Shutting down\n')
-        socket_server.close()
+                traceback.print_exc(file=sys.stderr)
+                break
+    except:
+        traceback.print_exc(file=sys.stderr)
+
+    sys.stderr.write('Exiting\n')
