@@ -8,6 +8,8 @@ import threading
 import traceback
 import resolver
 import json
+import logging
+import logging.handlers
 
 DATA_TEMPLATE = 'DATA\t%s\t%s\t%s\t%s\t%s\t%s\n'
 TTL = '5'
@@ -26,7 +28,7 @@ def process(data, resolver):
     line = data.strip()
 
     if line == 'HELO\t1' or line == 'HELO\t2' or line == 'HELO\t3':
-        sys.stderr.write('Sending OK\n')
+        logger.info('Got %s. Responding OK.' % line)
         sys.stdout.write('OK\t\n')
         sys.stdout.flush()
         return
@@ -49,7 +51,7 @@ def process(data, resolver):
     """
     Generate response and respond
     """
-    hostname = qname
+    hostname = qname.lower()
     if hostname[-1] == '.':
         hostname = hostname[:-1]
 
@@ -68,7 +70,9 @@ def process(data, resolver):
         if qtype == 'ANY' or qtype == 'SOA':
             response = DATA_TEMPLATE % (qname, qclass, 'SOA', TTL, qid, 'ns1.m.ripeatlasdns.net\troot.ripeatlasdns.net\t2008080300\t1800\t3600\t604800\t3600')
             sys.stdout.write(response)
+
     else:
+        logger.error('FAIL for %s' % line)
         sys.stdout.write('FAIL\n')
         sys.stdout.flush()
         return
@@ -95,8 +99,23 @@ if __name__ == '__main__':
         sys.stderr.write('usage: config.json\n')
         sys.exit(1)
 
+    loglevel = logging.DEBUG
+ 
+    logger = logging.getLogger()
+    logger.setLevel(loglevel)
+
+    formatter = logging.Formatter('%(process)d %(levelname)s %(message)s')
+
+    handler = logging.handlers.SysLogHandler(address = '/dev/log')
+    handler.setLevel(loglevel)
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    
     config = read_conffile(sys.argv[1])
-    sys.stderr.write('Finished reading configuration\n')
+    logger.debug('Finished reading configuration\n')
+    
+    #logging_config = config['logging']
+    #dictConfig(logging_config)
 
     #socket_file = config['socket-file']
     HOSTNAME_BASE = config['hostname-base']
@@ -107,13 +126,16 @@ if __name__ == '__main__':
         while True:
             
             line = sys.stdin.readline()
-            sys.stderr.write('Got line %s' % line)
+            logger.debug('Got line %s' % line)
+
             try:
                 process(line, resolver)
             except:
-                traceback.print_exc(file=sys.stderr)
+                #traceback.print_exc(file=sys.stderr)
+                logger.error(traceback.format_exc())
                 break
     except:
-        traceback.print_exc(file=sys.stderr)
+        #traceback.print_exc(file=sys.stderr)
+        logger.error(traceback.format_exc())
 
-    sys.stderr.write('Exiting\n')
+    logger.info('Exiting')

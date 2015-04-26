@@ -1,10 +1,22 @@
 import time
 from sqlalchemy import *
 import pylru
+import logging
+
+try:  # Python 2.7+
+    from logging import NullHandler
+except ImportError:
+    class NullHandler(logging.Handler):
+        def emit(self, record):
+            pass
+
+logging.getLogger(__name__).addHandler(NullHandler())
 
 class Resolver:
 
     def __init__(self, config):
+
+        self.logger = logging.getLogger()
         self.address = config['db.url']
         self.uniq_host = config['hostname-base']
       
@@ -37,7 +49,7 @@ class Resolver:
         dest_list = measurement['dest_list']      
  
         if measurement['measurement_start_time'] == None:
-            sys.stderr.write("First time probing this hostname\n")
+            self.logger.info("First request for %s" % hostname)
             
             update = self.connection.execute(self.m_table.update().where(self.m_table.c.id==measurement['id']), {"measurement_start_time": timestamp})
             #TODO what to do here if this fails??
